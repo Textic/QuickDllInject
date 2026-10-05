@@ -40,14 +40,14 @@ jobs:
       - name: Generate Public SDK Headers & Import Library
         shell: pwsh
         run: |
-          # 1. Compilar CustomBuildTool para generar phapppub.h
+          # 1. Build CustomBuildTool to generate phapppub.h
           Push-Location systeminformer
           dotnet build tools/CustomBuildTool/CustomBuildTool.csproj -c Release
           $cbtDll = (Get-ChildItem -Path "tools/CustomBuildTool/bin/Release" -Filter "CustomBuildTool.dll" -Recurse | Select-Object -First 1).FullName
           dotnet $cbtDll -phapppub_gen
           Pop-Location
 
-          # 2. Generar SystemInformer.lib para la arquitectura destino
+          # 2. Generate SystemInformer.lib for the target architecture
           $machine = switch ("${{ matrix.platform }}") {
             "Win32" { "x86" }
             "x64"   { "x64" }
