@@ -1,11 +1,11 @@
 # Visual Studio / MSBuild Output Directories
-bin/
-obj/
-x64/
-x86/
-ARM64/
-Debug/
-Release/
+/bin/
+/obj/
+/x64/
+/x86/
+/ARM64/
+/Debug/
+/Release/
 
 # Intermediate and Build Artifacts
 *.obj
@@ -16,8 +16,9 @@ Release/
 *.ilk
 *.exp
 *.lib
-SystemInformer.lib
-SystemInformer.exp
+!lib/**/*.lib
+/SystemInformer.lib
+/SystemInformer.exp
 
 # Visual Studio Local / User Files
 .vs/

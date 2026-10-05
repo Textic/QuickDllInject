@@ -15,8 +15,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        configuration: [ Release ]
-        platform: [ x64, Win32, ARM64 ]
+        include:
+          - platform: x64
+            arch: x64
+          - platform: Win32
+            arch: x86
+          - platform: ARM64
+            arch: x64_arm64
 
     steps:
       - name: Checkout QuickDllInject
@@ -32,45 +37,29 @@ jobs:
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ matrix.platform }}
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Generate Public SDK Headers & Import Library
-        shell: pwsh
-        run: |
-          # 1. Build CustomBuildTool to generate phapppub.h
-          Push-Location systeminformer
-          dotnet build tools/CustomBuildTool/CustomBuildTool.csproj -c Release
-          $cbtDll = (Get-ChildItem -Path "tools/CustomBuildTool/bin/Release" -Filter "CustomBuildTool.dll" -Recurse | Select-Object -First 1).FullName
-          dotnet $cbtDll -phapppub_gen
-          Pop-Location
-
-          # 2. Generate SystemInformer.lib for the target architecture
-          $machine = switch ("${{ matrix.platform }}") {
-            "Win32" { "x86" }
-            "x64"   { "x64" }
-            "ARM64" { "arm64" }
-            Default { "x64" }
-          }
-          lib.exe /def:systeminformer/SystemInformer/SystemInformer.def /out:SystemInformer.lib /machine:$machine
+          arch: ${{ matrix.arch }}
 
       - name: Compile QuickDllInject Plugin
         shell: pwsh
         run: |
           $siRoot = (Get-Item systeminformer).FullName + "\"
-          msbuild QuickDllInject.vcxproj /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /p:SystemInformerRoot="$siRoot" /p:SpectreMitigation=false /nologo
+          msbuild QuickDllInject.vcxproj /p:Configuration=Release /p:Platform=${{ matrix.platform }} /p:SystemInformerRoot="$siRoot" /p:SpectreMitigation=false /nologo
+
+      - name: Prepare Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "dist" -Force
+          $dll = (Get-ChildItem -Path "bin" -Filter "QuickDllInject.dll" -Recurse | Select-Object -First 1).FullName
+          $pdb = (Get-ChildItem -Path "bin" -Filter "QuickDllInject.pdb" -Recurse | Select-Object -First 1).FullName
+          Copy-Item $dll "dist/QuickDllInject-${{ matrix.platform }}.dll"
+          Copy-Item $pdb "dist/QuickDllInject-${{ matrix.platform }}.pdb"
+          Compress-Archive -Path $dll, $pdb -DestinationPath "dist/QuickDllInject-${{ matrix.platform }}.zip"
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: QuickDllInject-${{ matrix.platform }}
-          path: |
-            bin/**/QuickDllInject.dll
-            bin/**/QuickDllInject.pdb
+          path: dist/*
           if-no-files-found: error
 
   release:
@@ -85,11 +74,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
+          merge-multiple: true
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release-artifacts/**/*
+          files: release-artifacts/*
           draft: false
           prerelease: false
           generate_release_notes: true
