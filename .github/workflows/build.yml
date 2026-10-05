@@ -29,8 +29,10 @@ jobs:
           path: systeminformer
           depth: 1
 
-      - name: Setup MSBuild & Developer Tools
-        uses: microsoft/setup-msbuild@v2
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.platform }}
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
