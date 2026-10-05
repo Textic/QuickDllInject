@@ -61,13 +61,23 @@ msbuild QuickDllInject.vcxproj /p:Configuration=Release /p:Platform=x64 /p:Spect
 
 ## 📦 Installation
 
-1. Copy the compiled `QuickDllInject.dll` to your System Informer plugins directory:
+> [!IMPORTANT]
+> System Informer (Canary / v3 / v4) restricts plugins by default to built-in factory modules. To enable third-party plugins:
+> 1. In System Informer, open **Options -> Options** (`Ctrl + O`).
+> 2. Switch to the **Advanced** tab.
+> 3. Search for `EnableDefaultSafePlugins`.
+> 4. Double-click and change the value from `1` to **`0`** (or `False`).
+> 5. Click Save/OK and close System Informer.
+
+### Deploying the Plugin:
+1. Download the latest release from the [Releases](https://github.com/Textic/QuickDllInject/releases) page for your architecture (`x64`, `Win32`, or `ARM64`).
+2. Copy `QuickDllInject.dll` to your System Informer plugins directory:
    ```
    C:\Program Files\SystemInformer\plugins\
    ```
-   *(Administrator elevation required)*
-2. Restart **System Informer**.
-3. Verify that the plugin is enabled in **Options -> Plugins** (`QuickDllInject`).
+   *(Requires Administrator elevation)*
+3. Start **System Informer**.
+4. Verify that the plugin appears in **Options -> Plugins** under **Quick DLL Inject**.
 
 ---
 
