@@ -1,0 +1,93 @@
+name: Build QuickDllInject
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [ Release ]
+        platform: [ x64, Win32, ARM64 ]
+
+    steps:
+      - name: Checkout QuickDllInject
+        uses: actions/checkout@v4
+
+      - name: Checkout System Informer (SDK Headers)
+        uses: actions/checkout@v4
+        with:
+          repository: winsiderss/systeminformer
+          path: systeminformer
+          depth: 1
+
+      - name: Setup MSBuild & Developer Tools
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Generate Public SDK Headers & Import Library
+        shell: pwsh
+        run: |
+          # 1. Compilar CustomBuildTool para generar phapppub.h
+          Push-Location systeminformer
+          dotnet build tools/CustomBuildTool/CustomBuildTool.csproj -c Release
+          $cbtDll = (Get-ChildItem -Path "tools/CustomBuildTool/bin/Release" -Filter "CustomBuildTool.dll" -Recurse | Select-Object -First 1).FullName
+          dotnet $cbtDll -phapppub_gen
+          Pop-Location
+
+          # 2. Generar SystemInformer.lib para la arquitectura destino
+          $machine = switch ("${{ matrix.platform }}") {
+            "Win32" { "x86" }
+            "x64"   { "x64" }
+            "ARM64" { "arm64" }
+            Default { "x64" }
+          }
+          lib.exe /def:systeminformer/SystemInformer/SystemInformer.def /out:SystemInformer.lib /machine:$machine
+
+      - name: Compile QuickDllInject Plugin
+        shell: pwsh
+        run: |
+          $siRoot = (Get-Item systeminformer).FullName + "\"
+          msbuild QuickDllInject.vcxproj /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /p:SystemInformerRoot="$siRoot" /p:SpectreMitigation=false /nologo
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickDllInject-${{ matrix.platform }}
+          path: |
+            bin/**/QuickDllInject.dll
+            bin/**/QuickDllInject.pdb
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/**/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true

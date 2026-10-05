@@ -1,0 +1,41 @@
+# Visual Studio / MSBuild Output Directories
+bin/
+obj/
+x64/
+x86/
+ARM64/
+Debug/
+Release/
+
+# Intermediate and Build Artifacts
+*.obj
+*.res
+*.tlog
+*.lastbuildstate
+*.pdb
+*.ilk
+*.exp
+*.lib
+SystemInformer.lib
+SystemInformer.exp
+
+# Visual Studio Local / User Files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# CMake Outputs
+out/
+build/
+CMakeSettings.json
+CMakeCache.txt
+CMakeFiles/
+*.ninja
+
+# Windows OS Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
