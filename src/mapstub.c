@@ -29,7 +29,7 @@ static UCHAR QuickMapStubX64[] =
     0x48, 0x8B, 0x54, 0x24, 0x20,       // mov rdx,[rsp+0x20]
     0x48, 0x8B, 0x52, 0x10,             // mov rdx,[rdx+0x10]
     0x4C, 0x8B, 0x44, 0x24, 0x20,       // mov r8,[rsp+0x20]
-    0x4C, 0x8B, 0x40, 0x30,             // mov r8,[r8+0x30]
+    0x4D, 0x8B, 0x40, 0x30,             // mov r8,[r8+0x30]
     0xFF, 0xD0,                         // call rax
     // no_eh:
     0x48, 0x8B, 0x4C, 0x24, 0x20,       // mov rcx,[rsp+0x20]
@@ -38,12 +38,13 @@ static UCHAR QuickMapStubX64[] =
     0x74, 0x37,                         // jz no_tls
     0x48, 0x89, 0x44, 0x24, 0x28,       // mov [rsp+0x28],rax
     0x4C, 0x8B, 0x51, 0x20,             // mov r10,[rcx+0x20]
-    0x4D, 0x31, 0xDB,                   // xor r11,r11
-    // tls_loop:
-    0x4D, 0x39, 0xDA,                   // cmp r11,r10
+    0x4D, 0x31, 0xDB,                   // xor r11,r11 (32-bit forms also valid)
+    // tls_loop (NOTE: 0x3B keeps reg-dest order: cmp r11,r10;
+    // 0x39 would reverse the subtraction and break jae):
+    0x4D, 0x3B, 0xDA,                   // cmp r11,r10
     0x73, 0x26,                         // jae tls_done
     0x48, 0x8B, 0x44, 0x24, 0x28,       // mov rax,[rsp+0x28]
-    0x48, 0x8B, 0x04, 0xDB,             // mov rax,[rax+r11*8]
+    0x4A, 0x8B, 0x04, 0xD8,             // mov rax,[rax+r11*8]
     0x48, 0x85, 0xC0,                   // test rax,rax
     0x74, 0x13,                         // jz tls_next
     0x48, 0x8B, 0x4C, 0x24, 0x20,       // mov rcx,[rsp+0x20]
@@ -68,13 +69,15 @@ static UCHAR QuickMapStubX64[] =
 #elif defined(_M_IX86)
 
 // Loader stub (x86 stdcall, params at [esp+4]).
+// NOTE: bytes verified against MASM output; hand edits here have caused
+// off-by-one jumps before, so re-verify with stubref32.asm on change.
 static UCHAR QuickMapStubX86[] =
 {
     0x53,                               // push ebx
     0x8B, 0x5C, 0x24, 0x08,             // mov ebx,[esp+8]
     0x8B, 0x0B,                         // mov ecx,[ebx]
     0x85, 0xC9,                         // test ecx,ecx
-    0x74, 0x0C,                         // jz no_eh
+    0x74, 0x0B,                         // jz no_eh
     0xFF, 0x73, 0x30,                   // push [ebx+0x30]
     0xFF, 0x73, 0x10,                   // push [ebx+0x10]
     0xFF, 0x73, 0x08,                   // push [ebx+8]
@@ -82,12 +85,12 @@ static UCHAR QuickMapStubX86[] =
     // no_eh:
     0x8B, 0x4B, 0x18,                   // mov ecx,[ebx+0x18]
     0x85, 0xC9,                         // test ecx,ecx
-    0x74, 0x1E,                         // jz no_tls
+    0x74, 0x1C,                         // jz no_tls
     0x56,                               // push esi
     0x33, 0xF6,                         // xor esi,esi
     // tls_loop:
-    0x3B, 0xB3, 0x20, 0x00, 0x00, 0x00, // cmp esi,[ebx+0x20]
-    0x73, 0x0E,                         // jae tls_done
+    0x3B, 0x73, 0x20,                   // cmp esi,[ebx+0x20]
+    0x73, 0x13,                         // jae tls_done
     0x8B, 0x04, 0xB1,                   // mov eax,[ecx+esi*4]
     0x85, 0xC0,                         // test eax,eax
     0x74, 0x09,                         // jz tls_next
@@ -97,7 +100,7 @@ static UCHAR QuickMapStubX86[] =
     0xFF, 0xD0,                         // call eax
     // tls_next:
     0x46,                               // inc esi
-    0xEB, 0xE5,                         // jmp tls_loop
+    0xEB, 0xE8,                         // jmp tls_loop
     // tls_done:
     0x5E,                               // pop esi
     // no_tls:
@@ -113,6 +116,9 @@ static UCHAR QuickMapStubX86[] =
 #elif defined(_M_ARM64)
 
 // Loader stub (ARM64, params in x0). Little-endian words.
+// NOTE: every word below was derived field-by-field (no assembler for
+// ARM64 here); the TLS loop bumps the array pointer instead of using a
+// scaled register offset to keep encodings trivially verifiable.
 static ULONG QuickMapStubArm64[] =
 {
     0xD100C3FF, // sub sp, sp, #48
@@ -123,41 +129,41 @@ static ULONG QuickMapStubArm64[] =
     0xF94003E1, // ldr x1, [sp]
     0xB9401021, // ldr w1, [x1, #16]
     0xF94003E2, // ldr x2, [sp]
-    0xF9401822, // ldr x2, [x2, #48]
+    0xF9401842, // ldr x2, [x2, #48]
     0xD63F0120, // blr x9
     0xF94003E0, // ldr x0, [sp]
     // no_eh:
     0xF9400C09, // ldr x9, [x0, #24]
     0xB4000289, // cbz x9, no_tls
-    0xF9000829, // str x9, [sp, #16]
-    0xD280000A, // mov x10, #0
-    0xF900044A, // str x10, [sp, #8]
     0xF940100B, // ldr x11, [x0, #32]
+    0xB400024B, // cbz x11, no_tls
+    0xF9000829, // str x9, [sp, #16]
+    0xF900044B, // str x11, [sp, #8]
     // tls_loop:
-    0xF940044A, // ldr x10, [sp, #8]
-    0xEB0B014F, // cmp x10, x11
-    0x54A001AA, // b.hs tls_done
     0xF9400829, // ldr x9, [sp, #16]
-    0xF86A6929, // ldr x9, [x9, x10, lsl #3]
-    0xB40000C9, // cbz x9, tls_next
+    0xF9400129, // ldr x10, [x9]
+    0xB40000CA, // cbz x10, tls_next
     0xF94003E0, // ldr x0, [sp]
     0xF9401820, // ldr x0, [x0, #48]
     0x52800021, // mov w1, #1
     0xD2800042, // mov x2, #0
-    0xD63F0120, // blr x9
+    0xD63F0140, // blr x10
     // tls_next:
-    0xF940044A, // ldr x10, [sp, #8]
-    0x910004AA, // add x10, x10, #1
-    0xF900044A, // str x10, [sp, #8]
-    0x17FFFFF2, // b tls_loop
-    // tls_done: (no_tls:)
+    0xF9400829, // ldr x9, [sp, #16]
+    0x91002129, // add x9, x9, #8
+    0xF9000829, // str x9, [sp, #16]
+    0xF940044B, // ldr x11, [sp, #8]
+    0xD100052B, // sub x11, x11, #1
+    0xF900044B, // str x11, [sp, #8]
+    0xB5FFFE4B, // cbnz x11, tls_loop
+    // no_tls:
     0xF94003E0, // ldr x0, [sp]
     0xF9401409, // ldr x9, [x0, #40]
     0xF9401820, // ldr x0, [x0, #48]
     0x52800021, // mov w1, #1
     0xD2800042, // mov x2, #0
-    0xD63F0120, // blr x9
-    0x9100C3FF, // add sp, sp, #48
+    0xD63F0120, // blr x9 (DllMain)
+    0x910083FF, // add sp, sp, #48
     0xD65F03C0  // ret
 };
 

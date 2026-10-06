@@ -225,7 +225,11 @@ PVOID QuickFindModuleBase(
 
 NTSTATUS QuickErasePeHeaders(
     _In_ HANDLE ProcessHandle,
-    _In_ PVOID ModuleBase
+    _In_ HANDLE ProcessId,
+    _In_ BOOLEAN TargetWow64,
+    _In_ PVOID ModuleBase,
+    _In_ ULONG TimeoutMs,
+    _Out_ PULONG FailedStep
     );
 
 NTSTATUS QuickUnlinkFromPeb(

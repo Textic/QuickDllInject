@@ -178,12 +178,30 @@ BOOLEAN QuickInjectDllPath(
 
         if (eraseHeaders)
         {
-            status = QuickErasePeHeaders(processHandle, moduleBase);
+            ULONG eraseStep = 0;
+
+            status = QuickErasePeHeaders(
+                processHandle, ProcessItem->ProcessId, targetWow64, moduleBase, timeoutMs, &eraseStep
+                );
 
             if (!NT_SUCCESS(status))
             {
+                PCWSTR stepMessage = L"Unable to erase the PE headers.";
+
+                // Diagnostic step: 1 = read/validate, 2 = protection change
+                // refused, 3 = cross-process copy refused, 4 = in-target
+                // erase failed.
+                if (eraseStep == 1)
+                    stepMessage = L"Erase 1/4: cannot read the remote headers.";
+                else if (eraseStep == 2)
+                    stepMessage = L"Erase 2/4: cannot change header protection.";
+                else if (eraseStep == 3)
+                    stepMessage = L"Erase 3/4: cross-process copy refused.";
+                else if (eraseStep == 4)
+                    stepMessage = L"Erase 4/4: in-target erase failed.";
+
                 NtClose(processHandle);
-                PhShowStatus(OwnerWindow, L"Unable to erase the PE headers.", status, 0);
+                PhShowStatus(OwnerWindow, stepMessage, status, 0);
                 return FALSE;
             }
         }

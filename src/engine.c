@@ -160,7 +160,9 @@ NTSTATUS QuickInjectRemoteThread(
         goto CleanupExit;
     }
 
-    *ModuleBase = (PVOID)(ULONG_PTR)exitCode;
+    // NOTE: the thread exit code is a 32-bit DWORD, so a 64-bit base
+    // above 4 GB would be truncated. Resolve the real base by snapshot.
+    *ModuleBase = QuickFindModuleBase(ProcessId, DllPath);
 
 CleanupExit:
     if (threadHandle)
