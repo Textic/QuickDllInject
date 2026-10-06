@@ -11,12 +11,16 @@ A native lightweight C plugin for **System Informer** that adds a direct **"Inje
 ## 🎯 Features
 
 * **Direct 1-Click Access:** Right-click any process in the main tree view and click **Inject DLL...**.
-* **Native & Safe:** Uses System Informer's built-in `PhUiLoadDllProcess` API:
-  * Automatically opens the native file picker dialog filtered to `*.dll`.
-  * Acquires required target process access (`PROCESS_VM_OPERATION`, `PROCESS_VM_WRITE`, `PROCESS_CREATE_THREAD`).
-  * Injects/loads the dynamic library safely into the target address space via kernel driver or remote thread.
-  * Shows status and error reporting natively.
+* **Recent DLLs:** `Inject Recent DLL` submenu re-injects a previously used DLL in one click, plus `Clear History`.
+* **Two Injection Methods:** Remote thread (`CreateRemoteThread` + `LoadLibraryW`, verified load result) or APC thread (`QueueUserAPC`, stealthier).
+* **Opt-in Stealth (Options -> Stealth):** erase PE headers, unlink module from PEB loader lists, hide injection thread from debuggers. All default OFF.
+* **Native & Safe:**
+  * Native file picker dialog filtered to `*.dll`.
+  * Acquires required target process access via `PhOpenProcess` (driver-assisted when available).
+  * WOW64/native bitness-mismatch guard with a clear error instead of a crash.
+  * Shows status and error reporting natively, optional success balloon, optional confirm prompt.
 * **System Process Protection:** Automatically skips protected pseudo-processes (`System`, `Idle`).
+* **Options Page:** `Options -> Quick DLL Inject` with injection method (Remote thread / APC thread), remote-thread timeout and confirm-before-inject toggle. Settings persist across restarts.
 
 ---
 
@@ -29,6 +33,10 @@ QuickDllInject/
 ├── .gitignore                  # Visual Studio & MSBuild ignore rules
 ├── CMakeLists.txt              # CMake configuration
 ├── main.c                      # Plugin entry point & menu callbacks
+├── inject.c                    # Injection engine (remote/APC) + history
+├── stealth.c                   # Post-inject stealth (headers, PEB, thread flags)
+├── options.c                   # Options page (Options -> Quick DLL Inject)
+├── QuickDllInject.rc           # Options dialog resources
 ├── QuickDllInject.h            # Main header and SDK definitions
 ├── QuickDllInject.vcxproj      # Visual Studio 2022 project file
 ├── QuickDllInject.vcxproj.filters

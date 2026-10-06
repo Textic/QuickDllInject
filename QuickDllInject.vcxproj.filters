@@ -18,6 +18,15 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="options.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="inject.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="stealth.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QuickDllInject.h">
@@ -29,6 +38,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="version.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+    <ResourceCompile Include="QuickDllInject.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>

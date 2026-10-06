@@ -97,6 +97,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.c" />
+    <ClCompile Include="options.c" />
+    <ClCompile Include="inject.c" />
+    <ClCompile Include="stealth.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="QuickDllInject.h" />
@@ -104,6 +107,7 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="version.rc" />
+    <ResourceCompile Include="QuickDllInject.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

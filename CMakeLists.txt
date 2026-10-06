@@ -5,7 +5,11 @@ project(QuickDllInject LANGUAGES C)
 
 set(QUICKDLLINJECT_SOURCES
     main.c
+    options.c
+    inject.c
+    stealth.c
     version.rc
+    QuickDllInject.rc
 )
 
 set(QUICKDLLINJECT_HEADERS
