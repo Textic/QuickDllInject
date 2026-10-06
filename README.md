@@ -12,7 +12,7 @@ A native lightweight C plugin for **System Informer** that adds a direct **"Inje
 
 * **Direct 1-Click Access:** Right-click any process in the main tree view and click **Inject DLL...**.
 * **Recent DLLs:** `Inject Recent DLL` submenu re-injects a previously used DLL in one click, plus `Clear History`.
-* **Two Injection Methods:** Remote thread (`CreateRemoteThread` + `LoadLibraryW`, verified load result) or APC thread (`QueueUserAPC`, stealthier).
+* **Three Injection Methods:** Remote thread (verified load result), APC thread (stealthier), or Manual map (stealth PE loader, experimental).
 * **Opt-in Stealth (Options -> Stealth):** erase PE headers, unlink module from PEB loader lists, hide injection thread from debuggers. All default OFF.
 * **Native & Safe:**
   * Native file picker dialog filtered to `*.dll`.
@@ -32,10 +32,22 @@ QuickDllInject/
 │   └── build.yml               # Automated CI/CD workflow (x64, Win32, ARM64)
 ├── .gitignore                  # Visual Studio & MSBuild ignore rules
 ├── CMakeLists.txt              # CMake configuration
-├── main.c                      # Plugin entry point & menu callbacks
-├── inject.c                    # Injection engine (remote/APC) + history
-├── stealth.c                   # Post-inject stealth (headers, PEB, thread flags)
-├── options.c                   # Options page (Options -> Quick DLL Inject)
+├── src/
+│   ├── main.c                  # Plugin entry point & module init
+│   ├── util.c                  # Shared helpers
+│   ├── menu.c                  # Context menu + click routing
+│   ├── options.c               # Options page (Options -> Quick DLL Inject)
+│   ├── history.c               # Recent-DLL persistence
+│   ├── engine.c                # Remote/APC thread primitives
+│   ├── inject.c                # Injection orchestration
+│   ├── stealth.c               # Post-inject stealth (headers, PEB, thread flags)
+│   ├── manualmap.c             # Manual-map orchestration
+│   ├── mapimage.c              # Local PE image preparation
+│   ├── mapstub.c               # Loader stubs (x64/x86/ARM64)
+│   ├── QuickDllInject.rc       # Options dialog resources
+│   ├── QuickDllInject.h        # Main header and SDK definitions
+│   ├── resource.h              # Command and menu item IDs
+│   └── version.rc              # Binary metadata and versioning
 ├── QuickDllInject.rc           # Options dialog resources
 ├── QuickDllInject.h            # Main header and SDK definitions
 ├── QuickDllInject.vcxproj      # Visual Studio 2022 project file

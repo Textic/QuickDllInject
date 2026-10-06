@@ -1,7 +1,8 @@
 /*
  * QuickDllInject - System Informer Plugin
  *
- * Adds a direct "Inject DLL..." shortcut to the right-click context menu of processes.
+ * Process context menu: "Inject DLL..." item, recent-DLL submenu,
+ * and click routing.
  *
  * Authors:
  *     Textic
@@ -10,10 +11,8 @@
 
 #include "QuickDllInject.h"
 
-PPH_PLUGIN PluginInstance = NULL;
 static PH_CALLBACK_REGISTRATION ProcessMenuInitializingCallbackRegistration;
 static PH_CALLBACK_REGISTRATION PluginMenuItemCallbackRegistration;
-static PH_CALLBACK_REGISTRATION OptionsWindowInitializingCallbackRegistration;
 
 /**
  * Handles the menu item click when the user selects "Inject DLL...",
@@ -105,9 +104,6 @@ static PPH_EMENU_ITEM QuickCreateRecentSubmenu(
         for (ULONG i = 0; i < recentDlls->Count && i < maxEntries; i++)
         {
             PPH_STRING dllPath = (PPH_STRING)recentDlls->Items[i];
-            PCWSTR fileName = wcsrchr(dllPath->Buffer, L'\\');
-
-            fileName = fileName ? fileName + 1 : dllPath->Buffer;
 
             PhInsertEMenuItem(
                 submenu,
@@ -115,7 +111,7 @@ static PPH_EMENU_ITEM QuickCreateRecentSubmenu(
                     PluginInstance,
                     0,
                     ID_PROCESS_INJECT_RECENT_BASE + i,
-                    fileName,
+                    QuickGetFileName(dllPath->Buffer),
                     ProcessItem
                     ),
                 ULONG_MAX
@@ -206,70 +202,23 @@ static VOID NTAPI ProcessMenuInitializingCallback(
     }
 }
 
-/**
- * Plugin entry point (DLLMain).
- */
-LOGICAL DllMain(
-    _In_ HINSTANCE Instance,
-    _In_ ULONG Reason,
-    _Reserved_ PVOID Reserved
+VOID QuickMenuInitialize(
+    VOID
     )
 {
-    if (Reason == DLL_PROCESS_ATTACH)
-    {
-        PPH_PLUGIN_INFORMATION info;
+    // Subscribe to process context menu initialization callback
+    PhRegisterCallback(
+        PhGetGeneralCallback(GeneralCallbackProcessMenuInitializing),
+        ProcessMenuInitializingCallback,
+        NULL,
+        &ProcessMenuInitializingCallbackRegistration
+    );
 
-        // Register the plugin with System Informer
-        PluginInstance = PhRegisterPlugin(PLUGIN_NAME, Instance, &info);
-        if (!PluginInstance)
-            return FALSE;
-
-        info->DisplayName = L"Quick DLL Inject";
-        info->Author = L"Textic";
-        info->Description = L"Adds a direct 'Inject DLL...' shortcut to the process right-click context menu.";
-
-        // Persistent settings (Options -> Quick DLL Inject)
-        {
-            PH_SETTING_CREATE settings[] =
-            {
-                { IntegerSettingType, SETTING_NAME_INJECTION_METHOD, L"0" },
-                { IntegerSettingType, SETTING_NAME_INJECTION_TIMEOUT, L"5000" },
-                { IntegerSettingType, SETTING_NAME_CONFIRM_INJECT, L"0" },
-                { StringSettingType, SETTING_NAME_RECENT_DLLS, L"" },
-                { IntegerSettingType, SETTING_NAME_MAX_HISTORY, L"10" },
-                { IntegerSettingType, SETTING_NAME_NOTIFY_SUCCESS, L"1" },
-                { IntegerSettingType, SETTING_NAME_ERASE_HEADERS, L"0" },
-                { IntegerSettingType, SETTING_NAME_UNLINK_PEB, L"0" },
-                { IntegerSettingType, SETTING_NAME_HIDE_THREAD, L"0" },
-            };
-
-            PhAddSettings(settings, RTL_NUMBER_OF(settings));
-        }
-
-        // Options window section: Options -> Quick DLL Inject
-        PhRegisterCallback(
-            PhGetGeneralCallback(GeneralCallbackOptionsWindowInitializing),
-            ShowOptionsCallback,
-            NULL,
-            &OptionsWindowInitializingCallbackRegistration
-        );
-
-        // Subscribe to process context menu initialization callback
-        PhRegisterCallback(
-            PhGetGeneralCallback(GeneralCallbackProcessMenuInitializing),
-            ProcessMenuInitializingCallback,
-            NULL,
-            &ProcessMenuInitializingCallbackRegistration
-        );
-
-        // Subscribe to plugin menu item click callback
-        PhRegisterCallback(
-            PhGetPluginCallback(PluginInstance, PluginCallbackMenuItem),
-            MenuItemCallback,
-            NULL,
-            &PluginMenuItemCallbackRegistration
-        );
-    }
-
-    return TRUE;
+    // Subscribe to plugin menu item click callback
+    PhRegisterCallback(
+        PhGetPluginCallback(PluginInstance, PluginCallbackMenuItem),
+        MenuItemCallback,
+        NULL,
+        &PluginMenuItemCallbackRegistration
+    );
 }

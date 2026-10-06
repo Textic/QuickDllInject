@@ -13,15 +13,6 @@
 
 #define QUICK_PEB_WALK_LIMIT 8192
 
-static PCWSTR QuickGetFileNameOnly(
-    _In_ PCWSTR Path
-    )
-{
-    PCWSTR fileName = wcsrchr(Path, L'\\');
-
-    return fileName ? fileName + 1 : Path;
-}
-
 /**
  * Finds the base address of an already-loaded module in the target process
  * by matching the file path (falling back to the file name).
@@ -34,7 +25,7 @@ PVOID QuickFindModuleBase(
     HANDLE snapshotHandle = INVALID_HANDLE_VALUE;
     MODULEENTRY32W moduleEntry;
     PVOID moduleBase = NULL;
-    PCWSTR wantedFileName = QuickGetFileNameOnly(DllPath);
+    PCWSTR wantedFileName = QuickGetFileName(DllPath);
 
     snapshotHandle = CreateToolhelp32Snapshot(
         TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32,

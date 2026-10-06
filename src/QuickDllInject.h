@@ -80,6 +80,8 @@
 #define PLUGIN_NAME L"QuickDllInject"
 #define PLUGIN_OPTIONS_SECTION_NAME L"Quick DLL Inject"
 
+// --- Settings (options.c owns registration) ---
+
 #define SETTING_NAME_INJECTION_METHOD (PLUGIN_NAME L".InjectionMethod")
 #define SETTING_NAME_INJECTION_TIMEOUT (PLUGIN_NAME L".InjectionTimeoutMs")
 #define SETTING_NAME_CONFIRM_INJECT (PLUGIN_NAME L".ConfirmBeforeInject")
@@ -109,21 +111,45 @@
 typedef enum _QUICKDLLINJECT_METHOD
 {
     QuickDllInjectMethodRemoteThread = 0,
-    QuickDllInjectMethodApcThread = 1
+    QuickDllInjectMethodApcThread = 1,
+    QuickDllInjectMethodManualMap = 2
 } QUICKDLLINJECT_METHOD;
+
+#define QUICKDLLINJECT_METHOD_MAX QuickDllInjectMethodManualMap
 
 extern PPH_PLUGIN PluginInstance;
 
-BOOLEAN QuickBrowseAndInject(
-    _In_ HWND OwnerWindow,
-    _In_ PPH_PROCESS_ITEM ProcessItem
+// --- util.c: shared helpers ---
+
+PCWSTR QuickGetFileName(
+    _In_ PCWSTR Path
     );
 
-BOOLEAN QuickInjectDllPath(
-    _In_ HWND OwnerWindow,
-    _In_ PPH_PROCESS_ITEM ProcessItem,
-    _In_ PCWSTR DllPath
+// --- menu.c: context menu ---
+
+VOID QuickMenuInitialize(
+    VOID
     );
+
+// --- options.c: Options window page ---
+
+VOID QuickOptionsInitialize(
+    VOID
+    );
+
+VOID NTAPI ShowOptionsCallback(
+    _In_opt_ PVOID Parameter,
+    _In_opt_ PVOID Context
+    );
+
+INT_PTR CALLBACK OptionsDlgProc(
+    _In_ HWND WindowHandle,
+    _In_ UINT WindowMessage,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam
+    );
+
+// --- history.c: recent-DLL persistence ---
 
 PPH_LIST QuickGetRecentDlls(
     VOID
@@ -141,6 +167,57 @@ VOID QuickClearRecentDlls(
     VOID
     );
 
+// --- engine.c: remote/APC thread injection ---
+
+NTSTATUS QuickResolveRemoteProcedure(
+    _In_ HANDLE ProcessId,
+    _In_ BOOLEAN TargetWow64,
+    _In_ PCWSTR ModuleName,
+    _In_ PCSTR ProcedureName,
+    _Out_ PVOID *ProcedureAddress
+    );
+
+NTSTATUS QuickWaitForThread(
+    _In_ HANDLE ThreadHandle,
+    _In_ ULONG TimeoutMs,
+    _Out_ PULONG ExitCode
+    );
+
+NTSTATUS QuickInjectRemoteThread(
+    _In_ HANDLE ProcessHandle,
+    _In_ HANDLE ProcessId,
+    _In_ BOOLEAN TargetWow64,
+    _In_ PCWSTR DllPath,
+    _In_ ULONG TimeoutMs,
+    _In_ BOOLEAN HideThread,
+    _Out_ PVOID *ModuleBase
+    );
+
+NTSTATUS QuickInjectApcThread(
+    _In_ HANDLE ProcessHandle,
+    _In_ HANDLE ProcessId,
+    _In_ BOOLEAN TargetWow64,
+    _In_ PCWSTR DllPath,
+    _In_ ULONG TimeoutMs,
+    _In_ BOOLEAN HideThread,
+    _Out_ PVOID *ModuleBase
+    );
+
+// --- inject.c: high-level orchestration ---
+
+BOOLEAN QuickBrowseAndInject(
+    _In_ HWND OwnerWindow,
+    _In_ PPH_PROCESS_ITEM ProcessItem
+    );
+
+BOOLEAN QuickInjectDllPath(
+    _In_ HWND OwnerWindow,
+    _In_ PPH_PROCESS_ITEM ProcessItem,
+    _In_ PCWSTR DllPath
+    );
+
+// --- stealth.c: post-injection steps ---
+
 PVOID QuickFindModuleBase(
     _In_ HANDLE ProcessId,
     _In_ PCWSTR DllPath
@@ -156,16 +233,64 @@ NTSTATUS QuickUnlinkFromPeb(
     _In_ PVOID ModuleBase
     );
 
-VOID NTAPI ShowOptionsCallback(
-    _In_opt_ PVOID Parameter,
-    _In_opt_ PVOID Context
+// --- manualmap.c: stealth PE loader orchestration ---
+
+NTSTATUS QuickManualMap(
+    _In_ HANDLE ProcessHandle,
+    _In_ HANDLE ProcessId,
+    _In_ BOOLEAN TargetWow64,
+    _In_ PCWSTR DllPath,
+    _In_ ULONG TimeoutMs,
+    _In_ BOOLEAN HideThread,
+    _Out_ PVOID *ModuleBase
     );
 
-INT_PTR CALLBACK OptionsDlgProc(
-    _In_ HWND WindowHandle,
-    _In_ UINT WindowMessage,
-    _In_ WPARAM wParam,
-    _In_ LPARAM lParam
+// --- mapimage.c: local PE image preparation ---
+
+typedef struct _QUICK_MAP_LAYOUT
+{
+    ULONG EntryPointRva;
+    ULONG TlsArrayRva;
+    ULONG TlsCount;
+    ULONG ExceptionRva;
+    ULONG ExceptionCount;
+} QUICK_MAP_LAYOUT, *PQUICK_MAP_LAYOUT;
+
+#define QUICK_MAP_TLS_MAX_CALLBACKS 16
+
+PBYTE QuickReadMapFile(
+    _In_ PCWSTR FilePath,
+    _Out_ PSIZE_T FileSize
+    );
+
+NTSTATUS QuickInspectMapFile(
+    _In_ PBYTE FileData,
+    _In_ SIZE_T FileSize,
+    _Out_ PULONG_PTR PreferredBase,
+    _Out_ PULONG ImageSize
+    );
+
+NTSTATUS QuickBuildMapImage(
+    _In_ PBYTE FileData,
+    _In_ SIZE_T FileSize,
+    _In_ ULONG_PTR Delta,
+    _Out_writes_bytes_(ImageSize) PBYTE LocalImage,
+    _In_ ULONG ImageSize,
+    _Out_ PQUICK_MAP_LAYOUT Layout
+    );
+
+VOID QuickProtectMapSections(
+    _In_ HANDLE ProcessHandle,
+    _In_ PVOID RemoteBase,
+    _In_ PBYTE FileData,
+    _In_ SIZE_T FileSize,
+    _In_ ULONG ImageSize
+    );
+
+// --- mapstub.c: loader stubs ---
+
+PUCHAR QuickGetMapStub(
+    _Out_ PSIZE_T StubSize
     );
 
 #endif // _QUICKDLLINJECT_H_

@@ -10,6 +10,100 @@
 
 #include "QuickDllInject.h"
 
+static PH_CALLBACK_REGISTRATION OptionsWindowInitializingCallbackRegistration;
+
+typedef struct _QUICK_INT_EDIT
+{
+    INT EditId;
+    INT SpinId;
+    PCWSTR SettingName;
+    ULONG Minimum;
+    ULONG Maximum;
+    ULONG Default;
+} QUICK_INT_EDIT, *PQUICK_INT_EDIT;
+
+static const QUICK_INT_EDIT QuickTimeoutEdit =
+{
+    IDC_TIMEOUT_EDIT, IDC_TIMEOUT_SPIN,
+    SETTING_NAME_INJECTION_TIMEOUT,
+    INJECTION_TIMEOUT_MIN_MS, INJECTION_TIMEOUT_MAX_MS,
+    DEFAULT_INJECTION_TIMEOUT_MS
+};
+
+static const QUICK_INT_EDIT QuickHistoryEdit =
+{
+    IDC_HISTORY_EDIT, IDC_HISTORY_SPIN,
+    SETTING_NAME_MAX_HISTORY,
+    HISTORY_MIN_ENTRIES, HISTORY_MAX_ENTRIES,
+    DEFAULT_MAX_HISTORY
+};
+
+static ULONG QuickGetClampedSetting(
+    _In_ const QUICK_INT_EDIT *Edit
+    )
+{
+    ULONG value = PhGetIntegerSetting(Edit->SettingName);
+
+    if (value < Edit->Minimum || value > Edit->Maximum)
+        value = Edit->Default;
+
+    return value;
+}
+
+static VOID QuickInitIntEdit(
+    _In_ HWND DialogHandle,
+    _In_ const QUICK_INT_EDIT *Edit
+    )
+{
+    HWND spinHandle;
+    ULONG value = QuickGetClampedSetting(Edit);
+
+    SetDlgItemInt(DialogHandle, Edit->EditId, value, FALSE);
+
+    spinHandle = GetDlgItem(DialogHandle, Edit->SpinId);
+    SendMessage(spinHandle, UDM_SETRANGE32, (WPARAM)Edit->Minimum, (LPARAM)Edit->Maximum);
+    SendMessage(spinHandle, UDM_SETBUDDY, (WPARAM)GetDlgItem(DialogHandle, Edit->EditId), 0);
+    SendMessage(spinHandle, UDM_SETPOS32, 0, (LPARAM)(LONG)value);
+}
+
+static VOID QuickIntEditChanged(
+    _In_ HWND DialogHandle,
+    _In_ const QUICK_INT_EDIT *Edit
+    )
+{
+    BOOL translated = FALSE;
+    UINT value = GetDlgItemInt(DialogHandle, Edit->EditId, &translated, FALSE);
+
+    // Persist while typing only when the value is already in range;
+    // out-of-range text is normalized on kill focus so typing is
+    // never interrupted.
+    if (translated && value >= Edit->Minimum && value <= Edit->Maximum)
+    {
+        PhSetIntegerSetting(Edit->SettingName, value);
+        SendMessage(GetDlgItem(DialogHandle, Edit->SpinId), UDM_SETPOS32, 0, (LPARAM)(LONG)value);
+    }
+}
+
+static VOID QuickIntEditKillFocus(
+    _In_ HWND DialogHandle,
+    _In_ const QUICK_INT_EDIT *Edit
+    )
+{
+    BOOL translated = FALSE;
+    UINT value = GetDlgItemInt(DialogHandle, Edit->EditId, &translated, FALSE);
+
+    if (!translated)
+        value = PhGetIntegerSetting(Edit->SettingName);
+    if (value < Edit->Minimum)
+        value = Edit->Minimum;
+    if (value > Edit->Maximum)
+        value = Edit->Maximum;
+
+    PhSetIntegerSetting(Edit->SettingName, value);
+    SetDlgItemInt(DialogHandle, Edit->EditId, value, FALSE);
+    SendMessage(GetDlgItem(DialogHandle, Edit->SpinId), UDM_SETPOS32, 0, (LPARAM)(LONG)value);
+}
+
 static VOID QuickUpdateMethodDescription(
     _In_ HWND WindowHandle,
     _In_ ULONG Method
@@ -21,6 +115,9 @@ static VOID QuickUpdateMethodDescription(
     {
     case QuickDllInjectMethodApcThread:
         text = L"APC: suspended thread + queued LoadLibraryW call. Stealthier when remote threads are monitored.";
+        break;
+    case QuickDllInjectMethodManualMap:
+        text = L"Manual map: stealth PE loader, invisible to module lists. Experimental; system-DLL imports only.";
         break;
     case QuickDllInjectMethodRemoteThread:
     default:
@@ -47,47 +144,26 @@ INT_PTR CALLBACK OptionsDlgProc(
     case WM_INITDIALOG:
         {
             HWND comboBoxHandle;
-            HWND spinHandle;
             ULONG method;
-            ULONG timeoutMs;
-            ULONG maxHistory;
 
             method = PhGetIntegerSetting(SETTING_NAME_INJECTION_METHOD);
-            if (method > QuickDllInjectMethodApcThread)
+            if (method > QUICKDLLINJECT_METHOD_MAX)
                 method = QuickDllInjectMethodRemoteThread;
-
-            timeoutMs = PhGetIntegerSetting(SETTING_NAME_INJECTION_TIMEOUT);
-            if (timeoutMs < INJECTION_TIMEOUT_MIN_MS || timeoutMs > INJECTION_TIMEOUT_MAX_MS)
-                timeoutMs = DEFAULT_INJECTION_TIMEOUT_MS;
-
-            maxHistory = PhGetIntegerSetting(SETTING_NAME_MAX_HISTORY);
-            if (maxHistory < HISTORY_MIN_ENTRIES || maxHistory > HISTORY_MAX_ENTRIES)
-                maxHistory = DEFAULT_MAX_HISTORY;
 
             comboBoxHandle = GetDlgItem(WindowHandle, IDC_METHOD_COMBO);
             ComboBox_AddString(comboBoxHandle, L"Remote thread (LoadLibraryW)");
             ComboBox_AddString(comboBoxHandle, L"APC thread (QueueUserAPC)");
+            ComboBox_AddString(comboBoxHandle, L"Manual map (stealth loader)");
             ComboBox_SetCurSel(comboBoxHandle, (INT)method);
             QuickUpdateMethodDescription(WindowHandle, method);
 
-            SetDlgItemInt(WindowHandle, IDC_TIMEOUT_EDIT, timeoutMs, FALSE);
-
-            spinHandle = GetDlgItem(WindowHandle, IDC_TIMEOUT_SPIN);
-            SendMessage(spinHandle, UDM_SETRANGE32, INJECTION_TIMEOUT_MIN_MS, INJECTION_TIMEOUT_MAX_MS);
-            SendMessage(spinHandle, UDM_SETBUDDY, (WPARAM)GetDlgItem(WindowHandle, IDC_TIMEOUT_EDIT), 0);
-            SendMessage(spinHandle, UDM_SETPOS32, 0, (LPARAM)timeoutMs);
+            QuickInitIntEdit(WindowHandle, &QuickTimeoutEdit);
+            QuickInitIntEdit(WindowHandle, &QuickHistoryEdit);
 
             Button_SetCheck(GetDlgItem(WindowHandle, IDC_CONFIRM_CHECK),
                 PhGetIntegerSetting(SETTING_NAME_CONFIRM_INJECT) ? BST_CHECKED : BST_UNCHECKED);
             Button_SetCheck(GetDlgItem(WindowHandle, IDC_NOTIFY_CHECK),
                 PhGetIntegerSetting(SETTING_NAME_NOTIFY_SUCCESS) ? BST_CHECKED : BST_UNCHECKED);
-
-            SetDlgItemInt(WindowHandle, IDC_HISTORY_EDIT, maxHistory, FALSE);
-
-            spinHandle = GetDlgItem(WindowHandle, IDC_HISTORY_SPIN);
-            SendMessage(spinHandle, UDM_SETRANGE32, HISTORY_MIN_ENTRIES, HISTORY_MAX_ENTRIES);
-            SendMessage(spinHandle, UDM_SETBUDDY, (WPARAM)GetDlgItem(WindowHandle, IDC_HISTORY_EDIT), 0);
-            SendMessage(spinHandle, UDM_SETPOS32, 0, (LPARAM)maxHistory);
 
             Button_SetCheck(GetDlgItem(WindowHandle, IDC_ERASE_CHECK),
                 PhGetIntegerSetting(SETTING_NAME_ERASE_HEADERS) ? BST_CHECKED : BST_UNCHECKED);
@@ -107,7 +183,7 @@ INT_PTR CALLBACK OptionsDlgProc(
                     {
                         INT selected = ComboBox_GetCurSel(GET_WM_COMMAND_HWND(wParam, lParam));
 
-                        if (selected == QuickDllInjectMethodRemoteThread || selected == QuickDllInjectMethodApcThread)
+                        if (selected >= QuickDllInjectMethodRemoteThread && selected <= (INT)QUICKDLLINJECT_METHOD_MAX)
                         {
                             PhSetIntegerSetting(SETTING_NAME_INJECTION_METHOD, (ULONG)selected);
                             QuickUpdateMethodDescription(WindowHandle, (ULONG)selected);
@@ -118,35 +194,9 @@ INT_PTR CALLBACK OptionsDlgProc(
             case IDC_TIMEOUT_EDIT:
                 {
                     if (GET_WM_COMMAND_CMD(wParam, lParam) == EN_CHANGE)
-                    {
-                        BOOL translated = FALSE;
-                        UINT value = GetDlgItemInt(WindowHandle, IDC_TIMEOUT_EDIT, &translated, FALSE);
-
-                        // Persist while typing only when the value is already
-                        // in range; out-of-range text is normalized on kill focus
-                        // so typing is never interrupted.
-                        if (translated && value >= INJECTION_TIMEOUT_MIN_MS && value <= INJECTION_TIMEOUT_MAX_MS)
-                        {
-                            PhSetIntegerSetting(SETTING_NAME_INJECTION_TIMEOUT, value);
-                            SendMessage(GetDlgItem(WindowHandle, IDC_TIMEOUT_SPIN), UDM_SETPOS32, 0, (LPARAM)(LONG)value);
-                        }
-                    }
+                        QuickIntEditChanged(WindowHandle, &QuickTimeoutEdit);
                     else if (GET_WM_COMMAND_CMD(wParam, lParam) == EN_KILLFOCUS)
-                    {
-                        BOOL translated = FALSE;
-                        UINT value = GetDlgItemInt(WindowHandle, IDC_TIMEOUT_EDIT, &translated, FALSE);
-
-                        if (!translated)
-                            value = PhGetIntegerSetting(SETTING_NAME_INJECTION_TIMEOUT);
-                        if (value < INJECTION_TIMEOUT_MIN_MS)
-                            value = INJECTION_TIMEOUT_MIN_MS;
-                        if (value > INJECTION_TIMEOUT_MAX_MS)
-                            value = INJECTION_TIMEOUT_MAX_MS;
-
-                        PhSetIntegerSetting(SETTING_NAME_INJECTION_TIMEOUT, value);
-                        SetDlgItemInt(WindowHandle, IDC_TIMEOUT_EDIT, value, FALSE);
-                        SendMessage(GetDlgItem(WindowHandle, IDC_TIMEOUT_SPIN), UDM_SETPOS32, 0, (LPARAM)(LONG)value);
-                    }
+                        QuickIntEditKillFocus(WindowHandle, &QuickTimeoutEdit);
                 }
                 break;
             case IDC_CONFIRM_CHECK:
@@ -164,32 +214,9 @@ INT_PTR CALLBACK OptionsDlgProc(
             case IDC_HISTORY_EDIT:
                 {
                     if (GET_WM_COMMAND_CMD(wParam, lParam) == EN_CHANGE)
-                    {
-                        BOOL translated = FALSE;
-                        UINT value = GetDlgItemInt(WindowHandle, IDC_HISTORY_EDIT, &translated, FALSE);
-
-                        if (translated && value >= HISTORY_MIN_ENTRIES && value <= HISTORY_MAX_ENTRIES)
-                        {
-                            PhSetIntegerSetting(SETTING_NAME_MAX_HISTORY, value);
-                            SendMessage(GetDlgItem(WindowHandle, IDC_HISTORY_SPIN), UDM_SETPOS32, 0, (LPARAM)(LONG)value);
-                        }
-                    }
+                        QuickIntEditChanged(WindowHandle, &QuickHistoryEdit);
                     else if (GET_WM_COMMAND_CMD(wParam, lParam) == EN_KILLFOCUS)
-                    {
-                        BOOL translated = FALSE;
-                        UINT value = GetDlgItemInt(WindowHandle, IDC_HISTORY_EDIT, &translated, FALSE);
-
-                        if (!translated)
-                            value = PhGetIntegerSetting(SETTING_NAME_MAX_HISTORY);
-                        if (value < HISTORY_MIN_ENTRIES)
-                            value = HISTORY_MIN_ENTRIES;
-                        if (value > HISTORY_MAX_ENTRIES)
-                            value = HISTORY_MAX_ENTRIES;
-
-                        PhSetIntegerSetting(SETTING_NAME_MAX_HISTORY, value);
-                        SetDlgItemInt(WindowHandle, IDC_HISTORY_EDIT, value, FALSE);
-                        SendMessage(GetDlgItem(WindowHandle, IDC_HISTORY_SPIN), UDM_SETPOS32, 0, (LPARAM)(LONG)value);
-                    }
+                        QuickIntEditKillFocus(WindowHandle, &QuickHistoryEdit);
                 }
                 break;
             case IDC_CLEAR_HISTORY:
@@ -252,4 +279,32 @@ VOID NTAPI ShowOptionsCallback(
         OptionsDlgProc,
         NULL
         );
+}
+
+VOID QuickOptionsInitialize(
+    VOID
+    )
+{
+    PH_SETTING_CREATE settings[] =
+    {
+        { IntegerSettingType, SETTING_NAME_INJECTION_METHOD, L"0" },
+        { IntegerSettingType, SETTING_NAME_INJECTION_TIMEOUT, L"5000" },
+        { IntegerSettingType, SETTING_NAME_CONFIRM_INJECT, L"0" },
+        { StringSettingType, SETTING_NAME_RECENT_DLLS, L"" },
+        { IntegerSettingType, SETTING_NAME_MAX_HISTORY, L"10" },
+        { IntegerSettingType, SETTING_NAME_NOTIFY_SUCCESS, L"1" },
+        { IntegerSettingType, SETTING_NAME_ERASE_HEADERS, L"0" },
+        { IntegerSettingType, SETTING_NAME_UNLINK_PEB, L"0" },
+        { IntegerSettingType, SETTING_NAME_HIDE_THREAD, L"0" },
+    };
+
+    PhAddSettings(settings, RTL_NUMBER_OF(settings));
+
+    // Options window section: Options -> Quick DLL Inject
+    PhRegisterCallback(
+        PhGetGeneralCallback(GeneralCallbackOptionsWindowInitializing),
+        ShowOptionsCallback,
+        NULL,
+        &OptionsWindowInitializingCallbackRegistration
+    );
 }

@@ -55,21 +55,21 @@ This document outlines the planned roadmap for expanding **QuickDllInject** from
 
 ---
 
-## 📌 Phase 4: Advanced Injection Techniques
+## 📌 Phase 4: Advanced Injection Techniques — ✅ DONE (v1.4, experimental)
 
-- [ ] **Standard `LoadLibraryW` Injection (Current Default):**
-  - Robust `NtCreateThreadEx` + `LoadLibraryW` implementation with detailed error code reporting.
-- [ ] **Kernel-Assisted Injection (`KSystemInformer` Driver):**
-  - Utilize System Informer's native `kph` driver client interface (`KphOpenProcess`, `KphCreateUserThread`).
-  - Allows injecting into protected or elevated processes where user-mode handle opening is denied.
-- [ ] **Manual Map Injection (Stealth PE Loader):**
-  - Allocate virtual memory in target address space (`VirtualAllocEx`).
-  - Copy PE section headers and section data into target memory according to virtual alignments.
-  - Remotely parse and resolve the Import Address Table (IAT) for target dependencies.
-  - Apply base address relocations (`.reloc` directory).
-  - Execute TLS callbacks (if present) and invoke `DllMain(DLL_PROCESS_ATTACH)` directly without registering the module in the Windows loader.
-- [ ] **Thread Hijacking / APC Injection (`QueueUserAPC`):**
-  - Suspend an existing thread or queue an Asynchronous Procedure Call (APC) to execute loader shellcode when the thread enters an alertable wait state.
+- [x] **Standard `LoadLibraryW` Injection (Current Default):**
+  - Custom `NtCreateThreadEx` + `LoadLibraryW` engine with verified load result and detailed status reporting (`inject.c`). Default method.
+- [x] **Kernel-Assisted Injection (`KSystemInformer` Driver):**
+  - No dedicated driver thread-creation primitive exists (`KphCreateUserThread` does not exist).
+  - Covered architecturally: all target handles go through `PhOpenProcess`, which elevates via `KphOpenProcess` whenever the driver is present, falling back gracefully otherwise.
+- [x] **Manual Map Injection (Stealth PE Loader, `manualmap.c`):**
+  - File-backed mapping: headers + sections, base relocations (HIGHLOW/DIR64), locally-resolved imports, per-section protections.
+  - Position-independent loader stubs (hand-encoded x64/x86/ARM64) run TLS callbacks, register `RtlAddFunctionTable` (64-bit unwind) and call `DllMain` in-target.
+  - Invisible to loader lists by design (unlink step auto-skipped; erase-headers still applies).
+  - Limits (experimental): same-bitness only, system-DLL imports (same-boot assumption), no delay-load imports, malformed images rejected, resource-only DLLs map without execution.
+- [x] **Thread Hijacking / APC Injection (`QueueUserAPC`):**
+  - APC method ships (`QuickInjectApcThread`): suspended thread parked in `RtlExitUserThread` + queued `LoadLibraryW`, verified by wait result.
+  - Deviation: fresh thread (not hijacking an existing alertable one) — deterministic, no target-thread side effects.
 
 ---
 

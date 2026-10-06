@@ -4,17 +4,24 @@ cmake_minimum_required(VERSION 3.30.0 FATAL_ERROR)
 project(QuickDllInject LANGUAGES C)
 
 set(QUICKDLLINJECT_SOURCES
-    main.c
-    options.c
-    inject.c
-    stealth.c
-    version.rc
-    QuickDllInject.rc
+    src/main.c
+    src/util.c
+    src/menu.c
+    src/options.c
+    src/history.c
+    src/engine.c
+    src/inject.c
+    src/stealth.c
+    src/manualmap.c
+    src/mapimage.c
+    src/mapstub.c
+    src/version.rc
+    src/QuickDllInject.rc
 )
 
 set(QUICKDLLINJECT_HEADERS
-    QuickDllInject.h
-    resource.h
+    src/QuickDllInject.h
+    src/resource.h
 )
 
 add_library(QuickDllInject SHARED
